@@ -56,7 +56,7 @@ with open(train_label_path, "r") as f:
 
 with open("error_log.txt", "w") as f:
     f.write("ERROR LOG\n")
-with open(args.log_filename, "w") as f:
+with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("LOG\n")
 
 versions = ["Full Sentence", "Main Topic", "Ambiguous Word", "FS + MT", "FS + AW", "MT + AW", "FS + MT + AW"]
@@ -96,22 +96,19 @@ with torch.no_grad():
                 ranks.append((len(text_logits) + 1) - ss.rankdata(text_logits.detach().cpu()))
                 if labels[index][:-1] == image_names[torch.argmax(text_logits).item()]:
                     hit_rates[j] += 1
-
                 mrrs[j] += 1/ranks[j][image_names.index(labels[index][:-1])]
                 most_frequent_ranks[j][int(ranks[j][image_names.index(labels[index][:-1])])-1] += 1
 
-                
-
             if (index+1)%args.log_step == 0:
                 print("STEP", index+1)
-                with open("log.txt", "a+") as f:
+                with open(os.path.join("logs", "log.txt"), "a+") as f:
                     f.write("STEP " + str(index+1) + "\n")
-                for version, hit_rate, mrr, mfr in zip(versions, hit_rates, mrrs, most_frequent_ranks):
-                    print("VERSION ->", version)
-                    print("\tHIT RATE:", hit_rate/(index+1))
-                    print("\tMRR:", mrr/(index+1))
-                    print("\tMOST FREQUENT RANK:", mfr)
-                    with open("log.txt", "a+") as f:
+                    for version, hit_rate, mrr, mfr in zip(versions, hit_rates, mrrs, most_frequent_ranks):
+                        print("VERSION ->", version)
+                        print("\tHIT RATE:", hit_rate/(index+1))
+                        print("\tMRR:", mrr/(index+1))
+                        print("\tMOST FREQUENT RANK:", mfr)
+
                         f.write("VERSION -> " + version + "\n")
                         f.write("\tHIT RATE: " + str(hit_rate/(index+1)) + "\n")
                         f.write("\tMRR: " + str(mrr/(index+1)) + "\n")
