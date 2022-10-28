@@ -8,6 +8,7 @@ from tqdm import tqdm
 import os
 import pandas as pd
 import scipy.stats as ss
+import argparse
 
 import torch
 
@@ -16,15 +17,37 @@ from transformers import CLIPProcessor, CLIPModel
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
+parser = argparse.ArgumentParser(description="CLIP inference")
+
+parser.add_argument(
+    "--clip_finetuned_model_path",
+    help="Path to the finetuned CLIP model",
+    default=None,
+    required=False)
+parser.add_argument(
+    "--log_filename",
+    help="Name of the log file",
+    default="log.txt",
+    required=False)
+parser.add_argument(
+    "--log_step",
+    help="Number of steps after which to log",
+    type=int,
+    default=200,
+    required=False)
+
+args = parser.parse_args()
+
+if args.clip_finetuned_model_path is None:
+    model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
+else:
+    model = torch.load(args.clip_finetuned_model_path).to(device)
 model.eval()
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 
 input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "train_v1")
 train_data_path = os.path.join(input_folder_path, "val_data_v1.txt")
 train_label_path = os.path.join(input_folder_path, "val_label_v1.txt")
-#train_data_path = os.path.join(input_folder_path, "train.data.v1.txt")
-#train_label_path = os.path.join(input_folder_path, "train.gold.v1.txt")
 train_images_path = os.path.join(input_folder_path, "train_images_v1")
 
 df = pd.read_csv(train_data_path, sep="\t", header=None, names=["target_word", "full_phrase", "image_0", "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9"])
@@ -33,8 +56,8 @@ with open(train_label_path, "r") as f:
 
 with open("error_log.txt", "w") as f:
     f.write("ERROR LOG\n")
-#with open("log.txt", "w") as f:
-#    f.write("LOG\n")
+with open(args.log_filename, "w") as f:
+    f.write("LOG\n")
 
 versions = ["Full Sentence", "Main Topic", "Ambiguous Word", "FS + MT", "FS + AW", "MT + AW", "FS + MT + AW"]
 hit_rates = [0] * 7
@@ -68,7 +91,6 @@ with torch.no_grad():
                 torch.mean(logits, dim=0).unsqueeze(0)
             ), dim=0)
             
-            #print(sentence)
             ranks = []
             for j, text_logits in enumerate(logits):
                 ranks.append((len(text_logits) + 1) - ss.rankdata(text_logits.detach().cpu()))
@@ -78,10 +100,9 @@ with torch.no_grad():
                 mrrs[j] += 1/ranks[j][image_names.index(labels[index][:-1])]
                 most_frequent_ranks[j][int(ranks[j][image_names.index(labels[index][:-1])])-1] += 1
 
-                #print("\t", versions[j], " - ", ranks[j][image_names.index(labels[index][:-1])])
+                
 
-
-            if (index+1)%200 == 0:
+            if (index+1)%args.log_step == 0:
                 print("STEP", index+1)
                 with open("log.txt", "a+") as f:
                     f.write("STEP " + str(index+1) + "\n")
@@ -90,11 +111,11 @@ with torch.no_grad():
                     print("\tHIT RATE:", hit_rate/(index+1))
                     print("\tMRR:", mrr/(index+1))
                     print("\tMOST FREQUENT RANK:", mfr)
-                    # with open("log.txt", "a+") as f:
-                    #     f.write("VERSION -> " + version + "\n")
-                    #     f.write("\tHIT RATE: " + str(hit_rate/(index+1)) + "\n")
-                    #     f.write("\tMRR: " + str(mrr/(index+1)) + "\n")
-                    #     f.write("\tMOST FREQUENT RANK: " + str(mfr) + "\n")
+                    with open("log.txt", "a+") as f:
+                        f.write("VERSION -> " + version + "\n")
+                        f.write("\tHIT RATE: " + str(hit_rate/(index+1)) + "\n")
+                        f.write("\tMRR: " + str(mrr/(index+1)) + "\n")
+                        f.write("\tMOST FREQUENT RANK: " + str(mfr) + "\n")
 
         except OSError as e:
             print(e)
