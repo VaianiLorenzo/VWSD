@@ -20,8 +20,8 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 parser = argparse.ArgumentParser(description="CLIP inference")
 
 parser.add_argument(
-    "--clip_finetuned_model_path",
-    help="Path to the finetuned CLIP model",
+    "--clip_finetuned_model_name",
+    help="Name of the finetuned CLIP model",
     default=None,
     required=False)
 parser.add_argument(
@@ -38,10 +38,10 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if args.clip_finetuned_model_path is None:
+if args.clip_finetuned_model_name is None:
     model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
 else:
-    model = torch.load(args.clip_finetuned_model_path).to(device)
+    model = torch.load(os.path.join("checkpoints", args.clip_finetuned_model_name)).to(device)
 model.eval()
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 

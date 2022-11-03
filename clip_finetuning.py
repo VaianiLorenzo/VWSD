@@ -1,5 +1,3 @@
-from cgitb import text
-from re import A
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = 631770000
 
@@ -11,6 +9,7 @@ import os
 import glob
 import pandas as pd
 import scipy.stats as ss
+import argparse
 
 import torch
 import torch.utils.data as data
@@ -18,13 +17,45 @@ import torch.nn as nn
 from torch import optim
 
 from transformers import CLIPProcessor, CLIPModel
-
-
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-bs = 16
-epochs = 50
 
+parser = argparse.ArgumentParser(description="CLIP inference")
+
+parser.add_argument(
+    "--textual_input",
+    help="Part of sentence to be used as input",
+    default=None,
+    choices=['full_phrase', 'target_word', 'main_topic'],
+    required=True)
+parser.add_argument(
+    "--log_filename",
+    help="Name of the log file",
+    default="log.txt",
+    required=False)
+parser.add_argument(
+    "--log_step",
+    help="Number of steps after which to log",
+    type=int,
+    default=200,
+    required=False)
+parser.add_argument(
+    "--epochs",
+    help="Number of epochs",
+    type=int,
+    default=30,
+    required=False)
+parser.add_argument(
+    "--batch_size",
+    help="Batch size",
+    type=int,
+    default=16,
+    required=False)
+
+args = parser.parse_args()
+
+bs = args.batch_size
+epochs = args.epochs
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
@@ -49,18 +80,9 @@ with open(val_label_path, "r") as f:
     val_labels = f.readlines()
 val_gt_image_paths = [os.path.join(images_path, image_name[:-1]) for image_name in val_labels]
 
-with open("single_clip_training_log", "w") as f:
-    f.write("TRAINING LOG")
 
-
-# print("Start")
-# tokenized_sentences = processor(text=list(df["full_phrase"]), return_tensors="pt", padding=True)
-# print(len(tokenized_sentences))
-# print(len(tokenized_sentences["input_ids"]))
-# print("End")
-# images = dict()
-# preprocessed_images = [processor(images=Image.open(os.path.join(train_images_path, image_name)), return_tensors="pt", padding=True) for image_name in tqdm(os.listdir(train_images_path))]
-# print(len(preprocessed_images))
+with open(os.path.join("logs", args.log_filename), "w") as f:
+    f.write("TRAINING LOG\n")
 
 class CLIP_dataset(data.Dataset):
     def __init__(self, list_image_path, list_txt, processor):
@@ -83,7 +105,15 @@ val_dataloader = data.DataLoader(val_dataset, batch_size=bs, num_workers=16)
 
 loss_img = nn.CrossEntropyLoss()
 loss_txt = nn.CrossEntropyLoss()
+
+#start_lr = 1e-7
+#end_lr = 1e-8
+# compute delta for linear scheduler
+#gamma = (end_lr / start_lr) ** (1 / epochs)
+#print("GAMMA:", gamma)
+
 optimizer = optim.Adam(model.parameters(), lr=1e-7,betas=(0.9,0.98),eps=1e-6,weight_decay=0.2) # Params used from paper, the lr is smaller, more safe for fine tuning to new dataset
+#scheduler = torch.optim.lr_scheduler.StepLR(optimizer,  step_size=len(train_dataloader), gamma=gamma)
 
 best_val_loss = None
 total_loss = 0
@@ -106,11 +136,13 @@ for epoch in range(epochs):
         loss = (loss_img(outputs.logits_per_image,ground_truth) + loss_txt(outputs.logits_per_text,ground_truth))/2
         loss.backward()
         optimizer.step()
+        #scheduler.step()
         total_loss += loss.item()
     
     print("Train Loss at epoch", epoch+1, "->", total_loss/len(train_dataloader))
-    with open("single_clip_training_log", "a") as f:
-        f.write("Epoch " + str(epoch+1) + " - training loss: " + str(total_loss))
+    with open(os.path.join("logs", args.log_filename), "a") as f:
+        f.write("Epoch " + str(epoch+1) + "\n")
+        f.write("\tTraining loss: " + str(total_loss/len(train_dataloader)) + "\n")
     total_loss = 0
 
     # VALIDATION 
@@ -125,7 +157,7 @@ for epoch in range(epochs):
             ground_truth = torch.arange(len(images),dtype=torch.long,device=device)
 
             loss = (loss_img(outputs.logits_per_image,ground_truth) + loss_txt(outputs.logits_per_text,ground_truth))/2
-            total_loss += loss
+            total_loss += loss.item()
 
     
     if best_val_loss == None or total_loss < best_val_loss:
@@ -135,9 +167,9 @@ for epoch in range(epochs):
         best_epoch = epoch
 
     print("Validation", epoch+1, "->", total_loss/len(val_dataloader))
-    with open("single_clip_training_log", "a") as f:
-        f.write("Epoch " + str(epoch+1) + " - validation loss: " + str(total_loss))
+    with open(os.path.join("logs", args.log_filename), "a") as f:
+        f.write("\tValidation loss: " + str(total_loss/len(val_dataloader)) + "\n")
     total_loss = 0
 
-with open("single_clip_training_log", "a") as f:
-    f.write("Best model found at epoch " + str(best_epoch+1) + " with validation loss: " + str(best_val_loss))
+with open(os.path.join("logs", args.log_filename), "a") as f:
+    f.write("Best model found at epoch " + str(best_epoch+1) + " with validation loss: " + str(best_val_loss/len(val_dataloader)) + "\n")
