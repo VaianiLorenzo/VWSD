@@ -54,7 +54,7 @@ df = pd.read_csv(train_data_path, sep="\t", header=None, names=["target_word", "
 with open(train_label_path, "r") as f:
     labels = f.readlines()
 
-with open("error_log.txt", "w") as f:
+with open(os.path.join("logs", "error_log.txt"), "w") as f:
     f.write("ERROR LOG\n")
 with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("INFERENCE LOG\n")
@@ -121,7 +121,7 @@ with torch.no_grad():
             print("\t",sentence)
             print("\t",image_names)
 
-            with open("error_log.txt", "a+") as f:
+            with open(os.path.join("logs", "error_log.txt"), "a+") as f:
                 f.write("\tError at index: " + str(index) + "\n")
                 f.write("\tSentence: " + sentence + "\n")
                 f.write("\tImages: " + str(image_names) + "\n\n")
