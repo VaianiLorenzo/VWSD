@@ -34,12 +34,6 @@ parser.add_argument(
     default="log.txt",
     required=False)
 parser.add_argument(
-    "--log_step",
-    help="Number of steps after which to log",
-    type=int,
-    default=200,
-    required=False)
-parser.add_argument(
     "--epochs",
     help="Number of epochs",
     type=int,
@@ -98,9 +92,28 @@ class CLIP_dataset(data.Dataset):
         return image, {"input_ids":self.processed_sentences["input_ids"][idx], "attention_mask":self.processed_sentences["attention_mask"][idx]}
 
 
-train_dataset = CLIP_dataset(train_gt_image_paths, list(train_df["full_phrase"]), processor)
+train_sentences = list(train_df["full_phrase"])
+train_ambiguities = list(train_df["target_word"])
+train_main_topics = [(sentence[:sentence.find(ambiguity)] + sentence[sentence.find(ambiguity)+len(ambiguity):]).strip() for sentence, ambiguity in zip(train_sentences, train_ambiguities)]
+
+val_sentences = list(val_df["full_phrase"])
+val_ambiguities = list(val_df["target_word"])
+val_main_topics = [(sentence[:sentence.find(ambiguity)] + sentence[sentence.find(ambiguity)+len(ambiguity):]).strip() for sentence, ambiguity in zip(val_sentences, val_ambiguities)]
+
+
+if args.textual_input == "full_phrase":
+    train_textual_input = train_sentences
+    val_textual_input = val_sentences
+elif args.textual_input == "target_word":
+    train_textual_input = train_ambiguities
+    val_textual_input = val_ambiguities
+elif args.textual_input == "main_topic":
+    train_textual_input = train_main_topics
+    val_textual_input = val_main_topics
+
+train_dataset = CLIP_dataset(train_gt_image_paths, train_textual_input, processor)
 train_dataloader = data.DataLoader(train_dataset, batch_size=bs, shuffle = True, num_workers=16)
-val_dataset = CLIP_dataset(val_gt_image_paths, list(val_df["full_phrase"]), processor)
+val_dataset = CLIP_dataset(val_gt_image_paths, val_textual_input, processor)
 val_dataloader = data.DataLoader(val_dataset, batch_size=bs, num_workers=16)
 
 loss_img = nn.CrossEntropyLoss()
@@ -162,7 +175,7 @@ for epoch in range(epochs):
     
     if best_val_loss == None or total_loss < best_val_loss:
         print("BEST model found")
-        torch.save(model, os.path.join(output_path_root, "single_clip_finetuned.model"))
+        torch.save(model, os.path.join(output_path_root, "best_" + args.textual_input + "_model.pt"))
         best_val_loss = total_loss
         best_epoch = epoch
 
