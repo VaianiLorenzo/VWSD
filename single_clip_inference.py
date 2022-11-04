@@ -57,7 +57,7 @@ with open(train_label_path, "r") as f:
 with open("error_log.txt", "w") as f:
     f.write("ERROR LOG\n")
 with open(os.path.join("logs", args.log_filename), "w") as f:
-    f.write("LOG\n")
+    f.write("INFERENCE LOG\n")
 
 versions = ["Full Sentence", "Main Topic", "Ambiguous Word", "FS + MT", "FS + AW", "MT + AW", "FS + MT + AW"]
 hit_rates = [0] * 7
@@ -101,7 +101,7 @@ with torch.no_grad():
 
             if (index+1)%args.log_step == 0:
                 print("STEP", index+1)
-                with open(os.path.join("logs", "log.txt"), "a+") as f:
+                with open(os.path.join("logs", args.log_filename), "a+") as f:
                     f.write("STEP " + str(index+1) + "\n")
                     for version, hit_rate, mrr, mfr in zip(versions, hit_rates, mrrs, most_frequent_ranks):
                         print("VERSION ->", version)
@@ -128,8 +128,8 @@ with torch.no_grad():
 
 
 print("FINAL RESULTS")
-with open("log.txt", "a+") as f:
-    f.write("\nFINAL RESULTS")
+with open(os.path.join("logs", args.log_filename), "a+") as f:
+    f.write("\nFINAL RESULTS\n")
     for version, hit_rate, mrr, mfr in zip(versions, hit_rates, mrrs, most_frequent_ranks):
         print("VERSION ->", version)
         print("\tHIT RATE:", hit_rate/(index+1))

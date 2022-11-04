@@ -20,7 +20,7 @@ from transformers import CLIPProcessor, CLIPModel
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-parser = argparse.ArgumentParser(description="CLIP inference")
+parser = argparse.ArgumentParser(description="CLIP finetuning")
 
 parser.add_argument(
     "--textual_input",
@@ -175,7 +175,7 @@ for epoch in range(epochs):
     
     if best_val_loss == None or total_loss < best_val_loss:
         print("BEST model found")
-        torch.save(model, os.path.join(output_path_root, "best_" + args.textual_input + "_model.pt"))
+        torch.save(model, os.path.join(output_path_root, "best_model_" + args.textual_input + ".pt"))
         best_val_loss = total_loss
         best_epoch = epoch
 
