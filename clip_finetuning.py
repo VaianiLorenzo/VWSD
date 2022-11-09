@@ -10,14 +10,19 @@ import glob
 import pandas as pd
 import scipy.stats as ss
 import argparse
+import random
+import numpy as np
 
 import torch
 import torch.utils.data as data
 import torch.nn as nn
 from torch import optim
+from torchvision import transforms
 
 from transformers import CLIPProcessor, CLIPModel
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import nlpaug.augmenter.word as naw
 
 
 parser = argparse.ArgumentParser(description="CLIP finetuning")
@@ -28,23 +33,36 @@ parser.add_argument(
     default=None,
     choices=['full_phrase', 'target_word', 'main_topic'],
     required=True)
+
 parser.add_argument(
     "--log_filename",
     help="Name of the log file",
     default="log.txt",
     required=False)
+
 parser.add_argument(
     "--epochs",
     help="Number of epochs",
     type=int,
     default=30,
     required=False)
+
 parser.add_argument(
     "--batch_size",
     help="Batch size",
     type=int,
     default=16,
     required=False)
+
+ta_parser = parser.add_mutually_exclusive_group(required=False)
+ta_parser.add_argument('--textual_augmentation', dest='textual_augmentation', action='store_true')
+ta_parser.add_argument('--no-textual_augmentation', dest='textual_augmentation', action='store_false')
+parser.set_defaults(textual_augmentation=False)
+
+va_parser = parser.add_mutually_exclusive_group(required=False)
+va_parser.add_argument('--visual_augmentation', dest='visual_augmentation', action='store_true')
+va_parser.add_argument('--no-visual_augmentation', dest='visual_augmentation', action='store_false')
+parser.set_defaults(visual_augmentation=False)
 
 args = parser.parse_args()
 
@@ -79,18 +97,48 @@ with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("TRAINING LOG\n")
 
 class CLIP_dataset(data.Dataset):
-    def __init__(self, list_image_path, list_txt, processor):
+    def __init__(self, list_image_path, list_txt, processor, back_translator=None, ta=False, va=False):
         self.processor = processor
         self.image_path = list_image_path
-        self.processed_sentences  = processor(text=list_txt, return_tensors="pt", padding=True)
+        self.txt = list_txt
+        if back_translator is not None and ta:
+            #self.back_translated_txt = back_translator.augment(list_txt)
+            self.back_translated_txt = [back_translator.augment(s) for s in tqdm(list_txt)]
+        self.ta = ta
+        self.va = va
+        #self.processed_sentences  = processor(text=list_txt, return_tensors="pt", padding=True)
+
         
     def __len__(self):
-        return len(self.processed_sentences["input_ids"])
+        #return len(self.processed_sentences["input_ids"])
+        return len(self.txt)
 
     def __getitem__(self, idx):
-        image = self.processor(images=[Image.open(self.image_path[idx])], return_tensors="pt")
-        return image, {"input_ids":self.processed_sentences["input_ids"][idx], "attention_mask":self.processed_sentences["attention_mask"][idx]}
 
+        if self.ta:          
+            text = self.back_translated_txt[idx]
+        else:
+            text = self.txt[idx]
+        processed_text = self.processor(text=text, return_tensors="pt", max_length=16, padding="max_length", truncation=True)
+
+        if self.va:
+            image = self.augment_image(Image.open(self.image_path[idx]))
+        else:
+            image = Image.open(self.image_path[idx])
+        image = self.processor(images=[image], return_tensors="pt")
+
+        #return image, {"input_ids":self.processed_sentences["input_ids"][idx], "attention_mask":self.processed_sentences["attention_mask"][idx]}
+        return image, {"input_ids":processed_text["input_ids"][0], "attention_mask":processed_text["attention_mask"][0]}
+    
+    def augment_image(self, image):
+        if random.random() < 0.25:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
+        if random.random() < 0.25:
+            image = transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5)(image)
+        if random.random() < 0.25:
+            image = image.convert("L")
+        return image
+        
 
 train_sentences = list(train_df["full_phrase"])
 train_ambiguities = list(train_df["target_word"])
@@ -111,7 +159,14 @@ elif args.textual_input == "main_topic":
     train_textual_input = train_main_topics
     val_textual_input = val_main_topics
 
-train_dataset = CLIP_dataset(train_gt_image_paths, train_textual_input, processor)
+back_translation_aug = naw.BackTranslationAug(
+                from_model_name='facebook/wmt19-en-de', 
+                to_model_name='facebook/wmt19-de-en',
+                device='cuda',
+                max_length=50,
+            )
+
+train_dataset = CLIP_dataset(train_gt_image_paths, train_textual_input, processor, back_translation_aug, args.textual_augmentation, args.visual_augmentation)
 train_dataloader = data.DataLoader(train_dataset, batch_size=bs, shuffle = True, num_workers=16)
 val_dataset = CLIP_dataset(val_gt_image_paths, val_textual_input, processor)
 val_dataloader = data.DataLoader(val_dataset, batch_size=bs, num_workers=16)
@@ -175,7 +230,7 @@ for epoch in range(epochs):
     
     if best_val_loss == None or total_loss < best_val_loss:
         print("BEST model found")
-        torch.save(model, os.path.join(output_path_root, "best_model_" + args.textual_input + ".pt"))
+        #torch.save(model, os.path.join(output_path_root, "best_model_" + args.textual_input + ".pt"))
         best_val_loss = total_loss
         best_epoch = epoch
 

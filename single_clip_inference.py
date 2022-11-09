@@ -35,6 +35,12 @@ parser.add_argument(
     type=int,
     default=200,
     required=False)
+parser.add_argument(
+    "--phase",
+    help="Phase of the inference",
+    default="val",
+    choices=["test", "val", "trial"],
+    required=False)
 
 args = parser.parse_args()
 
@@ -45,13 +51,24 @@ else:
 model.eval()
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 
-input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "train_v1")
-train_data_path = os.path.join(input_folder_path, "val_data_v1.txt")
-train_label_path = os.path.join(input_folder_path, "val_label_v1.txt")
-train_images_path = os.path.join(input_folder_path, "train_images_v1")
+    
+if args.phase == "trial":
+    input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "trial_v1")
+    data_path = os.path.join(input_folder_path, "trial.data.v1.txt")
+    label_path = os.path.join(input_folder_path, "trial.gold.v1.txt")
+    images_path = os.path.join(input_folder_path, "trial_images_v1")
+elif args.phase == "val":
+    input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "train_v1")
+    data_path = os.path.join(input_folder_path, "val.data.v1.txt")
+    label_path = os.path.join(input_folder_path, "val.label.v1.txt")
+    images_path = os.path.join(input_folder_path, "train_images_v1")
+elif args.phase == "test":
+    input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "test_v1")
+    data_path = os.path.join(input_folder_path, "test.data.v1.txt")
+    images_path = os.path.join(input_folder_path, "test_images_v1")
 
-df = pd.read_csv(train_data_path, sep="\t", header=None, names=["target_word", "full_phrase", "image_0", "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9"])
-with open(train_label_path, "r") as f:
+df = pd.read_csv(data_path, sep="\t", header=None, names=["target_word", "full_phrase", "image_0", "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9"])
+with open(label_path, "r") as f:
     labels = f.readlines()
 
 with open(os.path.join("logs", "error_log.txt"), "w") as f:
@@ -59,7 +76,11 @@ with open(os.path.join("logs", "error_log.txt"), "w") as f:
 with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("INFERENCE LOG\n")
 
-versions = ["Full Sentence", "Main Topic", "Ambiguous Word", "FS + MT", "FS + AW", "MT + AW", "FS + MT + AW"]
+versions = ["FullSentence", "MainTopic", "AmbiguousWord", "FS+MT", "FS+AW", "MT+AW", "FS+MT+AW"]
+for version in versions:
+    with open(os.path.join("submissions", args.phase+"_submission_"+version+".txt"), "w") as f:
+        pass
+
 hit_rates = [0] * 7
 mrrs = [0] * 7
 most_frequent_ranks = [[0]*10 for i in range(7)] 
@@ -68,7 +89,8 @@ with torch.no_grad():
     for index, row in tqdm(df.iterrows(), total=df.shape[0]):
         try:
             image_names = [row["image_"+str(i)] for i in range(10)]
-            images = [Image.open(os.path.join(train_images_path, image_name)) for image_name in image_names]
+            print(image_names)
+            images = [Image.open(os.path.join(images_path, image_name)) for image_name in image_names]
             sentence = row["full_phrase"]
             ambiguous = row["target_word"]
 
@@ -93,11 +115,17 @@ with torch.no_grad():
             
             ranks = []
             for j, text_logits in enumerate(logits):
-                ranks.append((len(text_logits) + 1) - ss.rankdata(text_logits.detach().cpu()))
+                rank = (len(text_logits) + 1) - ss.rankdata(text_logits.detach().cpu())
+                image_names_ordered = [image_names[i] for i in rank.argsort()]
+                with open(os.path.join("submissions", args.phase+"_submission_"+versions[j]+".txt"), "a") as f:
+                    f.write("\t".join(image_names_ordered)+"\n")
+                ranks.append(rank)
+
                 if labels[index][:-1] == image_names[torch.argmax(text_logits).item()]:
                     hit_rates[j] += 1
                 mrrs[j] += 1/ranks[j][image_names.index(labels[index][:-1])]
                 most_frequent_ranks[j][int(ranks[j][image_names.index(labels[index][:-1])])-1] += 1
+            print(ranks)
 
             if (index+1)%args.log_step == 0:
                 print("STEP", index+1)
