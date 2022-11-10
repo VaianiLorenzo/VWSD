@@ -23,5 +23,7 @@ Otherwise, if you alredy finetuned the model, you can load and test your checkpo
 $ python single_clip_inference.py \
   --log_filename clip_results.txt \
   --log_step 200 \
-  --clip_finetuned_model_name clip_finetuned.model
+  --clip_finetuned_model_name clip_finetuned.model \
+  --textual_augmentation \
+  --visual_augmentation
 ```
