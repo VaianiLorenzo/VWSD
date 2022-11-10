@@ -59,8 +59,8 @@ if args.phase == "trial":
     images_path = os.path.join(input_folder_path, "trial_images_v1")
 elif args.phase == "val":
     input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "train_v1")
-    data_path = os.path.join(input_folder_path, "val.data.v1.txt")
-    label_path = os.path.join(input_folder_path, "val.label.v1.txt")
+    data_path = os.path.join(input_folder_path, "val_data_v1.txt")
+    label_path = os.path.join(input_folder_path, "val_label_v1.txt")
     images_path = os.path.join(input_folder_path, "train_images_v1")
 elif args.phase == "test":
     input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "test_v1")
@@ -89,7 +89,6 @@ with torch.no_grad():
     for index, row in tqdm(df.iterrows(), total=df.shape[0]):
         try:
             image_names = [row["image_"+str(i)] for i in range(10)]
-            print(image_names)
             images = [Image.open(os.path.join(images_path, image_name)) for image_name in image_names]
             sentence = row["full_phrase"]
             ambiguous = row["target_word"]
@@ -125,7 +124,6 @@ with torch.no_grad():
                     hit_rates[j] += 1
                 mrrs[j] += 1/ranks[j][image_names.index(labels[index][:-1])]
                 most_frequent_ranks[j][int(ranks[j][image_names.index(labels[index][:-1])])-1] += 1
-            print(ranks)
 
             if (index+1)%args.log_step == 0:
                 print("STEP", index+1)

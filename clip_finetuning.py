@@ -86,37 +86,37 @@ train_df = pd.read_csv(train_data_path, sep="\t", header=None, names=["target_wo
 with open(train_label_path, "r") as f:
     train_labels = f.readlines()
 train_gt_image_paths = [os.path.join(images_path, image_name[:-1]) for image_name in train_labels]
+with open(os.path.join(input_folder_path, "train_" + args.textual_input + "_aug.txt"), "r") as f:
+    train_augmented_sentences = f.readlines()
 
 val_df = pd.read_csv(val_data_path, sep="\t", header=None, names=["target_word", "full_phrase", "image_0", "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9"])
 with open(val_label_path, "r") as f:
     val_labels = f.readlines()
 val_gt_image_paths = [os.path.join(images_path, image_name[:-1]) for image_name in val_labels]
+with open(os.path.join(input_folder_path, "val_" + args.textual_input + "_aug.txt"), "r") as f:
+    val_augmented_sentences = f.readlines()
 
 
 with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("TRAINING LOG\n")
 
 class CLIP_dataset(data.Dataset):
-    def __init__(self, list_image_path, list_txt, processor, back_translator=None, ta=False, va=False):
+    def __init__(self, list_image_path, list_txt, processor, list_txt_aug=None, ta=False, va=False):
         self.processor = processor
         self.image_path = list_image_path
         self.txt = list_txt
-        if back_translator is not None and ta:
-            #self.back_translated_txt = back_translator.augment(list_txt)
-            self.back_translated_txt = [back_translator.augment(s) for s in tqdm(list_txt)]
+        if list_txt_aug is not None and ta:
+            self.list_txt_aug = list_txt_aug
         self.ta = ta
         self.va = va
-        #self.processed_sentences  = processor(text=list_txt, return_tensors="pt", padding=True)
-
         
     def __len__(self):
-        #return len(self.processed_sentences["input_ids"])
         return len(self.txt)
 
     def __getitem__(self, idx):
 
-        if self.ta:          
-            text = self.back_translated_txt[idx]
+        if self.ta and random.random() < 0.5:          
+            text = self.list_txt_aug[idx]
         else:
             text = self.txt[idx]
         processed_text = self.processor(text=text, return_tensors="pt", max_length=16, padding="max_length", truncation=True)
@@ -148,7 +148,6 @@ val_sentences = list(val_df["full_phrase"])
 val_ambiguities = list(val_df["target_word"])
 val_main_topics = [(sentence[:sentence.find(ambiguity)] + sentence[sentence.find(ambiguity)+len(ambiguity):]).strip() for sentence, ambiguity in zip(val_sentences, val_ambiguities)]
 
-
 if args.textual_input == "full_phrase":
     train_textual_input = train_sentences
     val_textual_input = val_sentences
@@ -159,14 +158,7 @@ elif args.textual_input == "main_topic":
     train_textual_input = train_main_topics
     val_textual_input = val_main_topics
 
-back_translation_aug = naw.BackTranslationAug(
-                from_model_name='facebook/wmt19-en-de', 
-                to_model_name='facebook/wmt19-de-en',
-                device='cuda',
-                max_length=50,
-            )
-
-train_dataset = CLIP_dataset(train_gt_image_paths, train_textual_input, processor, back_translation_aug, args.textual_augmentation, args.visual_augmentation)
+train_dataset = CLIP_dataset(train_gt_image_paths, train_textual_input, processor, list_txt_aug=train_augmented_sentences, ta=args.textual_augmentation, va=args.visual_augmentation)
 train_dataloader = data.DataLoader(train_dataset, batch_size=bs, shuffle = True, num_workers=16)
 val_dataset = CLIP_dataset(val_gt_image_paths, val_textual_input, processor)
 val_dataloader = data.DataLoader(val_dataset, batch_size=bs, num_workers=16)
@@ -230,7 +222,7 @@ for epoch in range(epochs):
     
     if best_val_loss == None or total_loss < best_val_loss:
         print("BEST model found")
-        #torch.save(model, os.path.join(output_path_root, "best_model_" + args.textual_input + ".pt"))
+        torch.save(model, os.path.join(output_path_root, "best_model_" + args.textual_input + "_" + str(args.textual_augmentation) + str(args.visual_augmentation) + ".pt"))
         best_val_loss = total_loss
         best_epoch = epoch
 
