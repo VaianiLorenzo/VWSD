@@ -8,7 +8,9 @@ $ python clip_finetuning.py \
   --textual_input full_phrase \
   --log_filename clip_training.txt \
   --epochs 30 \
-  --batch_size 16
+  --batch_size 16 \
+  --textual_augmentation \
+  --visual_augmentation
 ```
 
 ## Inference
@@ -23,7 +25,5 @@ Otherwise, if you alredy finetuned the model, you can load and test your checkpo
 $ python single_clip_inference.py \
   --log_filename clip_results.txt \
   --log_step 200 \
-  --clip_finetuned_model_name clip_finetuned.model \
-  --textual_augmentation \
-  --visual_augmentation
+  --clip_finetuned_model_name clip_finetuned.model 
 ```
