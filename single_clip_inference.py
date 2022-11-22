@@ -41,17 +41,32 @@ parser.add_argument(
     default="val",
     choices=["test", "val", "trial"],
     required=False)
+parser.add_argument(
+    "--model_size",
+    help="Size of the CLIP model",
+    default="large",
+    choices=["large", "base"],
+    required=False)
 
 args = parser.parse_args()
 
+# Load the model
 if args.clip_finetuned_model_name is None:
-    model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
+    if args.model_size == "large":
+        model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    elif args.model_size == "base":
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 else:
     model = torch.load(os.path.join("checkpoints", args.clip_finetuned_model_name)).to(device)
+    if model.config.hidden_size == 1024:
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    elif model.config.hidden_size == 512:
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 model.eval()
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 
-    
+# Load the data
 if args.phase == "trial":
     input_folder_path = os.path.join("semeval-2023-task-1-V-WSD-train-v1", "trial_v1")
     data_path = os.path.join(input_folder_path, "trial.data.v1.txt")
@@ -71,11 +86,13 @@ df = pd.read_csv(data_path, sep="\t", header=None, names=["target_word", "full_p
 with open(label_path, "r") as f:
     labels = f.readlines()
 
+# Create log files
 with open(os.path.join("logs", "error_log.txt"), "w") as f:
     f.write("ERROR LOG\n")
 with open(os.path.join("logs", args.log_filename), "w") as f:
     f.write("INFERENCE LOG\n")
 
+# Create submission files
 versions = ["FullSentence", "MainTopic", "AmbiguousWord", "FS+MT", "FS+AW", "MT+AW", "FS+MT+AW"]
 for version in versions:
     with open(os.path.join("submissions", args.phase+"_submission_"+version+".txt"), "w") as f:

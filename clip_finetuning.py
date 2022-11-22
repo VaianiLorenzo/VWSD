@@ -86,15 +86,21 @@ train_df = pd.read_csv(train_data_path, sep="\t", header=None, names=["target_wo
 with open(train_label_path, "r") as f:
     train_labels = f.readlines()
 train_gt_image_paths = [os.path.join(images_path, image_name[:-1]) for image_name in train_labels]
-with open(os.path.join(input_folder_path, "train_" + args.textual_input + "_aug.txt"), "r") as f:
-    train_augmented_sentences = f.readlines()
+if args.textual_augmentation:
+    with open(os.path.join(input_folder_path, "train_" + args.textual_input + "_aug.txt"), "r") as f:
+        train_augmented_sentences = f.readlines()
+else:
+    train_augmented_sentences = None
 
 val_df = pd.read_csv(val_data_path, sep="\t", header=None, names=["target_word", "full_phrase", "image_0", "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9"])
 with open(val_label_path, "r") as f:
     val_labels = f.readlines()
 val_gt_image_paths = [os.path.join(images_path, image_name[:-1]) for image_name in val_labels]
-with open(os.path.join(input_folder_path, "val_" + args.textual_input + "_aug.txt"), "r") as f:
-    val_augmented_sentences = f.readlines()
+if args.textual_augmentation:
+    with open(os.path.join(input_folder_path, "val_" + args.textual_input + "_aug.txt"), "r") as f:
+        val_augmented_sentences = f.readlines()
+else:
+    val_augmented_sentences = None
 
 
 with open(os.path.join("logs", args.log_filename), "w") as f:
