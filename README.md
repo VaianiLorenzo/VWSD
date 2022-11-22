@@ -9,6 +9,7 @@ $ python clip_finetuning.py \
   --log_filename clip_training.txt \
   --epochs 30 \
   --batch_size 16 \
+  --model_size large \
   --textual_augmentation \
   --visual_augmentation
 ```
