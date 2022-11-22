@@ -14,16 +14,19 @@ $ python clip_finetuning.py \
 ```
 
 ## Inference
-If you want to test the standard CLIP large pretraing from Hugging Face [(here)](https://huggingface.co/openai/clip-vit-large-patch14) you can run:
-```shell
-$ python single_clip_inference.py \
-  --log_filename clip_results.txt \
-  --log_step 200
-```
-Otherwise, if you alredy finetuned the model, you can load and test your checkpoint, stored in the ```checkpoints``` folder, running the following:
+If you want to test the standard pretrained CLIP model from Hugging Face (both [large](https://huggingface.co/openai/clip-vit-large-patch14) and [base](https://huggingface.co/openai/clip-vit-base-patch32)) you can run:
 ```shell
 $ python single_clip_inference.py \
   --log_filename clip_results.txt \
   --log_step 200 \
+  --phase val \
+  --model_size large
+```
+Otherwise, if you alredy finetuned a model, you can load and use your checkpoint, stored in the ```checkpoints``` folder, running the following:
+```shell
+$ python single_clip_inference.py \
+  --log_filename clip_results.txt \
+  --log_step 200 \
+  --phase val \
   --clip_finetuned_model_name clip_finetuned.model 
 ```
